@@ -27,26 +27,24 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     outputs:
-      proceed: \${{ steps.check.outputs.proceed }}
+      proceed: ${{ steps.check.outputs.proceed }}
     steps:
       - id: check
         run: |
-          if [ "\${{ github.event_name }}" != "schedule" ]; then
-            echo "Event is \${{ github.event_name }}, not gating."
-            echo "proceed=true" >> "\$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "Event is ${{ github.event_name }}, not gating."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          # The cron already restricted this to a Wednesday; the second one of
-          # any month is always between the 8th and the 14th inclusive.
-          dom=\$(date -u +%-d)
-          if [ "\(dom" -ge 8 ] && [ "\)dom" -le 14 ]; then
-            echo "Day \$dom -- second Wednesday, building."
-            echo "proceed=true" >> "\$GITHUB_OUTPUT"
+          dom=$(date -u +%-d)
+          if [ "$dom" -ge 8 ] && [ "$dom" -le 14 ]; then
+            echo "Day $dom -- second Wednesday, building."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Day \$dom -- not the second Wednesday, skipping."
-            echo "proceed=false" >> "\$GITHUB_OUTPUT"
+            echo "Day $dom -- not the second Wednesday, skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
           fi
+
 
   build-iso:
     needs: gate
