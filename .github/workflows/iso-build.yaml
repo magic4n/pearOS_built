@@ -27,25 +27,25 @@ jobs:
   gate:
     runs-on: ubuntu-latest
     outputs:
-      proceed: ${{ steps.check.outputs.proceed }}
+      proceed: \${{ steps.check.outputs.proceed }}
     steps:
       - id: check
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "Event is ${{ github.event_name }}, not gating."
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          if [ "\${{ github.event_name }}" != "schedule" ]; then
+            echo "Event is \${{ github.event_name }}, not gating."
+            echo "proceed=true" >> "\$GITHUB_OUTPUT"
             exit 0
           fi
 
           # The cron already restricted this to a Wednesday; the second one of
           # any month is always between the 8th and the 14th inclusive.
-          dom=$(date -u +%-d)
-          if [ "$dom" -ge 8 ] && [ "$dom" -le 14 ]; then
-            echo "Day $dom -- second Wednesday, building."
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          dom=\$(date -u +%-d)
+          if [ "\(dom" -ge 8 ] && [ "\)dom" -le 14 ]; then
+            echo "Day \$dom -- second Wednesday, building."
+            echo "proceed=true" >> "\$GITHUB_OUTPUT"
           else
-            echo "Day $dom -- not the second Wednesday, skipping."
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Day \$dom -- not the second Wednesday, skipping."
+            echo "proceed=false" >> "\$GITHUB_OUTPUT"
           fi
 
   build-iso:
@@ -82,12 +82,6 @@ jobs:
           # legacy NVIDIA branches. mkarchiso/pacstrap verifies those against
           # the *container's* keyring, so the key has to be here -- shipping
           # cachyos-keyring inside the ISO only covers the installed system.
-          #
-          # The keyring package is republished in our own repo and signed with
-          # our key, which is already trusted two lines up. So it installs
-          # through the normal verified path; the previous Manjaro bootstrap
-          # had to blank out LocalFileSigLevel/RemoteFileSigLevel to get its
-          # keyring in, which meant one unverified package download per build.
           awk '/^\[cachyos\]/{skip=1; next} /^\[/{skip=0} !skip' /etc/pacman.conf \
             > /tmp/pacman-bootstrap.conf
           pacman -Sy --noconfirm --config /tmp/pacman-bootstrap.conf
@@ -107,74 +101,37 @@ jobs:
             xorriso \
             e2fsprogs \
             git \
-            pv \
-            rclone
+            pv
 
       - name: Starting Build
         run: |
           chmod +x ./kickstart.sh
           ./kickstart.sh
 
-      - name: Configure rclone (R2)
-        env:
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
-        run: |
-          mkdir -p "${HOME}/.config/rclone"
-          cat > "${HOME}/.config/rclone/rclone.conf" <<EOF
-          [r2-pearos]
-          type = s3
-          provider = Cloudflare
-          access_key_id = ${R2_ACCESS_KEY_ID}
-          secret_access_key = ${R2_SECRET_ACCESS_KEY}
-          endpoint = ${R2_ENDPOINT_URL}
-          acl = private
-          EOF
-
-      - name: Uploading to R2 (pearos-cdn/iso)
-        run: |
-          ISO_FILE=$(ls out/*.iso 2>/dev/null || ls *.iso 2>/dev/null | head -n 1)
-
-          if [ -z "$ISO_FILE" ]; then
-            echo "[ ERR ]: Could not find ISO file."
-            exit 1
-          fi
-
-          echo "Uploading $ISO_FILE (file-size: $(du -h "$ISO_FILE" | cut -f1)) to Cloudflare R2 (pearos-cdn/iso)..."
-
-          rclone copy "$ISO_FILE" "r2-pearos:pearos-cdn/iso/" --progress
-
-          if [ -f sha.txt ]; then
-            SHA_FILE="$(basename "$ISO_FILE").sha256"
-            cp sha.txt "$SHA_FILE"
-
-            echo "Uploading $SHA_FILE to Cloudflare R2 (pearos-cdn/iso)..."
-
-            rclone copy "$SHA_FILE" "r2-pearos:pearos-cdn/iso/" --progress
-          else
-            echo "[ ERR ]: sha.txt not found, skipping checksum upload."
-          fi
-
-          echo "[ SUCCESS ] Upload finished"
+      - name: Upload ISO to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearOS-NiceC0re-ISO
+          path: |
+            out/*.iso
+            *.iso
+            sha.txt
+          compression-level: 0
+          retention-days: 5
 
       - name: Commit updated sha.txt
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: \${{ github.token }}
         run: |
-          # $GITHUB_WORKSPACE/.git is gone by this point (something in the
-          # mkarchiso/pacstrap process wipes or obscures it) -- clone fresh
-          # into a separate dir instead of depending on the build workspace's
-          # own repo state.
-          new_sha=$(cat "$GITHUB_WORKSPACE/sha.txt")
+          new_sha=(cat "GITHUB_WORKSPACE/sha.txt")
 
-          clonedir=$(mktemp -d)
-          git clone --depth 1 --branch "${GITHUB_REF_NAME}" \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            "$clonedir"
+          clonedir=\$(mktemp -d)
+          git clone --depth 1 --branch "\${GITHUB_REF_NAME}" \
+            "https://x-access-token:\({GH_TOKEN}@github.com/\){GITHUB_REPOSITORY}.git" \
+            "\$clonedir"
 
-          cd "$clonedir"
-          echo "$new_sha" > sha.txt
+          cd "\$clonedir"
+          echo "\$new_sha" > sha.txt
 
           git config user.name "pearOS build bot"
           git config user.email "actions@users.noreply.github.com"
@@ -185,5 +142,5 @@ jobs:
           fi
 
           git add sha.txt
-          git commit -m "Update sha.txt for $(basename "$(ls "$GITHUB_WORKSPACE"/*.iso 2>/dev/null | head -n1)")"
-          git push origin "${GITHUB_REF_NAME}"
+          git commit -m "Update sha.txt for (basename "(ls "\(GITHUB_WORKSPACE"/*.iso 2>/dev/null \vert{}\vert{} ls "\)GITHUB_WORKSPACE"/out/*.iso 2>/dev/null | head -n1)")"
+          git push origin "\${GITHUB_REF_NAME}"
